@@ -223,7 +223,18 @@ namespace Opc.Ua.Gds.Client
                     if (m_certificate != null &&
                         m_certificate.HasPrivateKey)
                     {
-                        m_certificate = await id.LoadPrivateKey(m_certificatePassword);
+                        try
+                        {
+                            //this line fails with a CryptographicException if export of private key is not allowed
+                            _ = m_certificate.GetRSAPrivateKey().ExportParameters(true);
+                            //proceed with a CSR using the exportable private key
+                            m_certificate = await id.LoadPrivateKey(m_certificatePassword);
+                        }
+                        catch
+                        {
+                            //use KeyPair Request instead
+                            m_certificate = null;
+                        }
                     }
                 }
 
@@ -340,6 +351,11 @@ namespace Opc.Ua.Gds.Client
                             }
                             else
                             {
+                                X509Certificate2 oldCertificate = await cid.LoadPrivateKey(string.Empty);
+                                if (oldCertificate != null)
+                                {
+                                    await store.Delete(oldCertificate.Thumbprint);
+                                }
                                 newCert = new X509Certificate2(privateKeyPFX, string.Empty, X509KeyStorageFlags.Exportable);
                                 newCert = CertificateFactory.Load(newCert, true);
                             }
